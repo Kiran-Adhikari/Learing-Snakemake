@@ -1,8 +1,10 @@
+configfile:"config.yaml"
+
 # Input to process
-CONDITIONS = glob_wildcards("reads/{condition}_1_1.fq").condition
+CONDITIONS = config["conditions"]
 print("Conditions are: ", CONDITIONS)
 
-REPLICATES = ["1", "2", "3"] 
+REPLICATES = config["replicates"] 
 READ = ["1", "2"]
 
 rule multiqc:
@@ -36,8 +38,11 @@ rule countreads:
 rule trimreads:
   output: "trimmed/{myfile}.fq"
   input: "reads/{myfile}.fq"
+  params:
+    qual_thresh = config["trimreads_qual_thresh"],
+    min_len     = config.get("trimreads_min_len", "100")
   shell:
-    "fastq_quality_trimmer -t 22 -l 100 -o {output} < {input}"
+    "fastq_quality_trimmer -t {params.qual_thresh} -l {params.min_len} -o {output} < {input}"
     
 # kallist reads alignment
 rule kallisto_quant:
@@ -49,8 +54,10 @@ rule kallisto_quant:
     fq2 = "trimmed/{sample}_2.fq"
   shell: 
     """
+      mkdir {output}
       kallisto quant -i {input.idx} \
-      -o {output} {input.fq1} {input.fq2}
+        -o {output} {input.fq1} {input.fq2} \
+        >& {output}/kallisto_quant.log
     """
     
 #kallisto index
@@ -79,8 +86,10 @@ rule fastqc:
 rule salmon_index:
   output: directory("transcriptome/{strain}.salmon_index")
   input: "transcriptome/{strain}.cdna.all.fa.gz"
+  params:
+    kmer = config.get("salmon_kmer", "29")
   shell:
-    "salmon index -t {input} -i {output} -k 31"
+    "salmon index -t {input} -i {output} -k {params.kmer}"
     
 # salmon alignment
 rule salmon_quant:
